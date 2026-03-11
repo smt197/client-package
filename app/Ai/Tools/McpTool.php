@@ -17,6 +17,11 @@ class McpTool implements Tool
         protected Closure $handler
     ) {}
 
+    public function name(): string
+    {
+        return $this->toolName;
+    }
+
     public function description(): string
     {
         return $this->toolDescription;

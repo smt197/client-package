@@ -6,6 +6,7 @@ use App\Ai\Tools\McpTool;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
 
 class OrchestratorController extends Controller
@@ -38,21 +39,36 @@ class OrchestratorController extends Controller
 
         // 3. Transformer les outils MCP en implémentations du contrat Tool du SDK
         $aiTools = [];
+        $registeredToolNames = [];
+
         foreach ($mcpToolsList as $mcpTool) {
+            $toolName = $mcpTool['name'];
+
+            // Éviter les doublons
+            if (in_array($toolName, $registeredToolNames)) {
+                continue;
+            }
+
             $aiTools[] = new McpTool(
-                toolName: $mcpTool['name'],
-                toolDescription: $mcpTool['description'] ?? '',
-                inputSchema: $mcpTool['inputSchema'] ?? ['type' => 'object', 'properties' => []],
-                handler: fn (array $arguments) => $this->callMcpTool($mcpTool['name'], $arguments)
+                toolName: $toolName,
+                toolDescription: $mcpTool['description'] ?? 'MCP Tool',
+                inputSchema: $mcpTool['inputSchema'] ?? [
+                    'type' => 'object',
+                    'properties' => []
+                ],
+                handler: fn(array $arguments) => $this->callMcpTool($toolName, $arguments)
             );
+
+            $registeredToolNames[] = $toolName;
         }
 
+        Log::info("🛠️ Outils MCP chargés pour l'Agent : ", $registeredToolNames);
+
         // 4. Créer un agent anonyme avec les outils MCP et lui soumettre le prompt
-       $systemPrompt = 'Tu es un architecte logiciel Laravel expert. '
+        $systemPrompt = 'Tu es un architecte logiciel Laravel expert. '
             . 'Tu as accès à des outils externes (MCP) pour interagir avec le projet cible. '
-            . 'RÈGLE 1 : Tu dois utiliser les outils pour obtenir les vraies informations. '
-            . 'RÈGLE 2 : UNE FOIS que tu as reçu le retour de l\'outil, tu DOIS IMPÉRATIVEMENT analyser ce résultat et rédiger une réponse claire et détaillée pour l\'utilisateur. Ne renvoie jamais une réponse vide. '
-            . 'Réponds toujours en français.';
+            . 'Tu DOIS utiliser les outils pour obtenir les informations réelles avant de répondre. '
+            . 'Réponds toujours en français et de manière précise.';
 
         $agent = new AnonymousAgent(
             instructions: $systemPrompt,
@@ -62,14 +78,26 @@ class OrchestratorController extends Controller
 
         $response = $agent->prompt(
             prompt: $prompt,
-            provider: 'ollama',
+            provider: 'openai',
             model: env('OLLAMA_MODEL', 'qwen2.5:7b'),
             timeout: 600
         );
 
+        $textResponse = (string) $response;
+
+          // 2. Si c'est toujours vide, on inspecte ce qu'Ollama a vraiment répondu !
+        if (empty(trim($textResponse))) {
+            return response()->json([
+                'success' => false,
+                'error' => 'La réponse textuelle est vide.',
+                // On dump l'objet brut pour comprendre ce qui bloque (ex: tableau tool_calls non résolu)
+                'raw_response' => json_decode(json_encode($response), true),
+            ]);
+        }
+
         return response()->json([
             'success'     => true,
-            'ai_response' => (string) $response,
+            'ai_response' => $textResponse,
         ]);
     }
 

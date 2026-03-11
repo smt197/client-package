@@ -114,7 +114,13 @@ return [
 
         'openai' => [
             'driver' => 'openai',
-            'key' => env('OPENAI_API_KEY'),
+            'key' => env('OPENAI_API_KEY', 'fake-key-pour-ollama'),
+            'url' => env('OPENAI_BASE_URL', 'http://127.0.0.1:11434/v1'), // Pointant vers Ollama en local
+            'models' => [
+                'text' =>[
+                    'default'  => env('OLLAMA_MODEL', 'qwen2.5:7b'),
+                ],
+            ],
         ],
 
         'openrouter' => [
