@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Ai\Tools\McpTool;
+use App\Services\ModuleWriterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -40,6 +41,7 @@ class OrchestratorController extends Controller
         // 3. Transformer les outils MCP en implémentations du contrat Tool du SDK
         $aiTools = [];
         $registeredToolNames = [];
+        $moduleWriterService = new ModuleWriterService();
 
         foreach ($mcpToolsList as $mcpTool) {
             $toolName = $mcpTool['name'];
@@ -56,7 +58,11 @@ class OrchestratorController extends Controller
                     'type' => 'object',
                     'properties' => []
                 ],
-                handler: fn(array $arguments) => $this->callMcpTool($toolName, $arguments)
+                handler: fn(array $arguments) => $this->callMcpToolAndProcess(
+                    $toolName,
+                    $arguments,
+                    $moduleWriterService
+                )
             );
 
             $registeredToolNames[] = $toolName;
@@ -85,12 +91,10 @@ class OrchestratorController extends Controller
 
         $textResponse = (string) $response;
 
-          // 2. Si c'est toujours vide, on inspecte ce qu'Ollama a vraiment répondu !
         if (empty(trim($textResponse))) {
             return response()->json([
                 'success' => false,
                 'error' => 'La réponse textuelle est vide.',
-                // On dump l'objet brut pour comprendre ce qui bloque (ex: tableau tool_calls non résolu)
                 'raw_response' => json_decode(json_encode($response), true),
             ]);
         }
@@ -99,6 +103,52 @@ class OrchestratorController extends Controller
             'success'     => true,
             'ai_response' => $textResponse,
         ]);
+    }
+
+    /**
+     * Appelle un outil MCP et traite le résultat (écriture locale si generate-module).
+     */
+    private function callMcpToolAndProcess(string $name, array $arguments, ModuleWriterService $writer): mixed
+    {
+        $result = $this->callMcpTool($name, $arguments);
+
+        // Si c'est le tool generate-module, intercepter et écrire les fichiers localement
+        if ($name === 'generate-module' && is_array($result)) {
+            $textContent = $result['content'][0]['text'] ?? null;
+
+            if ($textContent) {
+                $moduleData = json_decode($textContent, true);
+
+                if (is_array($moduleData) && isset($moduleData['files'])) {
+                    Log::info('🏗️ Interception generate-module: écriture des fichiers dans client-package');
+
+                    $writeResult = $writer->processModuleResult($moduleData);
+
+                    Log::info('📦 Résultat écriture module:', $writeResult);
+
+                    // Retourner un résumé lisible pour l'IA
+                    $summary = $writeResult['success']
+                        ? "✅ Module écrit avec succès dans client-package!\n"
+                        : "⚠️ Module partiellement écrit.\n";
+
+                    $summary .= "Fichiers créés:\n";
+                    foreach ($writeResult['files_written'] as $file) {
+                        $summary .= "  - {$file}\n";
+                    }
+
+                    if (! empty($writeResult['errors'])) {
+                        $summary .= "\nErreurs:\n";
+                        foreach ($writeResult['errors'] as $error) {
+                            $summary .= "  - {$error}\n";
+                        }
+                    }
+
+                    return $summary;
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -167,3 +217,4 @@ class OrchestratorController extends Controller
             ->post($this->mcpServerUrl, $body);
     }
 }
+
