@@ -105,9 +105,9 @@ return [
             'url' => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
             'models' => [
                 'text' => [
-                    'default'  => env('OLLAMA_MODEL', 'qwen2.5:7b'),
-                    'cheapest' => env('OLLAMA_MODEL', 'qwen2.5:7b'),
-                    'smartest' => env('OLLAMA_MODEL', 'qwen2.5:7b'),
+                    'default'  => env('OLLAMA_MODEL', 'qwen2.5:3b'),
+                    'cheapest' => env('OLLAMA_MODEL', 'qwen2.5:3b'),
+                    'smartest' => env('OLLAMA_MODEL', 'qwen2.5:3b'),
                 ],
             ],
         ],
