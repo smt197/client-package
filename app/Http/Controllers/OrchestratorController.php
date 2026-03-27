@@ -148,6 +148,42 @@ class OrchestratorController extends Controller
             }
         }
 
+        // Si c'est le tool delete-module, intercepter et supprimer les fichiers localement
+        if ($name === 'delete-module' && is_array($result)) {
+            $textContent = $result['content'][0]['text'] ?? null;
+
+            if ($textContent) {
+                $moduleData = json_decode($textContent, true);
+
+                if (is_array($moduleData) && isset($moduleData['files_to_delete'])) {
+                    Log::info('🗑️ Interception delete-module: suppression des fichiers dans client-package');
+
+                    $deleteResult = $writer->processDeleteResult($moduleData);
+
+                    Log::info('📦 Résultat suppression module:', $deleteResult);
+
+                    // Retourner un résumé lisible pour l'IA
+                    $summary = $deleteResult['success']
+                        ? "✅ Module supprimé avec succès de client-package!\n"
+                        : "⚠️ Module partiellement supprimé.\n";
+
+                    $summary .= "Fichiers supprimés:\n";
+                    foreach ($deleteResult['files_deleted'] as $file) {
+                        $summary .= "  - {$file}\n";
+                    }
+
+                    if (! empty($deleteResult['errors'])) {
+                        $summary .= "\nErreurs:\n";
+                        foreach ($deleteResult['errors'] as $error) {
+                            $summary .= "  - {$error}\n";
+                        }
+                    }
+
+                    return $summary;
+                }
+            }
+        }
+
         return $result;
     }
 

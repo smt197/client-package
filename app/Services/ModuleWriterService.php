@@ -81,7 +81,113 @@ class ModuleWriterService
     }
 
     /**
+     * Process the MCP delete-module result and remove files locally.
+     *
+     * @param  array  $mcpResult  The structured result from the MCP delete-module tool
+     * @return array{success: bool, message: string, files_deleted: array<string>, errors: array<string>}
+     */
+    public function processDeleteResult(array $mcpResult): array
+    {
+        $filesDeleted = [];
+        $errors = [];
+
+        try {
+            // 1. Delete explicit files
+            if (! empty($mcpResult['files_to_delete'])) {
+                foreach ($mcpResult['files_to_delete'] as $relativePath) {
+                    $absolutePath = base_path($relativePath);
+                    if (File::exists($absolutePath)) {
+                        try {
+                            File::delete($absolutePath);
+                            $filesDeleted[] = $relativePath;
+                            Log::info("🗑️ Fichier supprimé: {$relativePath}");
+                        } catch (Exception $e) {
+                            $errors[] = "Failed to delete {$relativePath}: {$e->getMessage()}";
+                            Log::error("❌ Erreur suppression: {$relativePath}", ['error' => $e->getMessage()]);
+                        }
+                    }
+                }
+            }
+
+            // 2. Delete migration matching pattern
+            if (! empty($mcpResult['migration_pattern'])) {
+                $migrations = File::glob(base_path($mcpResult['migration_pattern']));
+                foreach ($migrations as $migration) {
+                    try {
+                        $relativePath = str_replace(base_path().DIRECTORY_SEPARATOR, '', $migration);
+                        File::delete($migration);
+                        $filesDeleted[] = $relativePath;
+                        Log::info("🗑️ Migration supprimée: {$relativePath}");
+                    } catch (Exception $e) {
+                        $errors[] = "Failed to delete migration {$migration}: {$e->getMessage()}";
+                    }
+                }
+            }
+
+            // 3. Remove route from routes/api.php
+            if (! empty($mcpResult['route_removal'])) {
+                try {
+                    $this->removeRoute($mcpResult['route_removal']);
+                    $filesDeleted[] = 'routes/api.php (updated)';
+                    Log::info('🗑️ Route retirée de routes/api.php');
+                } catch (Exception $e) {
+                    $errors[] = "Failed to remove route: {$e->getMessage()}";
+                    Log::error('❌ Erreur retrait route', ['error' => $e->getMessage()]);
+                }
+            }
+
+            return [
+                'success' => empty($errors),
+                'message' => empty($errors)
+                    ? 'Module removed successfully from client-package'
+                    : 'Module partially removed with errors',
+                'files_deleted' => $filesDeleted,
+                'errors' => $errors,
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Module removal failed: '.$e->getMessage(),
+                'files_deleted' => $filesDeleted,
+                'errors' => array_merge($errors, [$e->getMessage()]),
+            ];
+        }
+    }
+
+    /**
+     * Remove route and imports from routes/api.php.
+     */
+    protected function removeRoute(array $removalData): void
+    {
+        $routesPath = base_path($removalData['file'] ?? 'routes/api.php');
+
+        if (! File::exists($routesPath)) {
+            return;
+        }
+
+        $content = File::get($routesPath);
+
+        // Remove route line
+        $routeLine = $removalData['route_line_pattern'] ?? '';
+        if (! empty($routeLine)) {
+            $content = str_replace($routeLine, '', $content);
+        }
+
+        // Remove import line
+        $importLine = $removalData['import_line'] ?? '';
+        if (! empty($importLine)) {
+            $content = str_replace($importLine, '', $content);
+        }
+
+        // Clean up empty lines
+        $content = preg_replace("/\n\s*\n\s*\n/", "\n\n", $content);
+
+        File::put($routesPath, $content);
+    }
+
+    /**
      * Write a file to the project's filesystem.
+     ...
      */
     protected function writeFile(string $relativePath, string $content): void
     {
