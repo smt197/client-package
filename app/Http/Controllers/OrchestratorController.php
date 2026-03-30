@@ -184,6 +184,42 @@ class OrchestratorController extends Controller
             }
         }
 
+        // Si c'est le tool edit-module, intercepter et mettre à jour les fichiers localement
+        if ($name === 'edit-module' && is_array($result)) {
+            $textContent = $result['content'][0]['text'] ?? null;
+
+            if ($textContent) {
+                $moduleData = json_decode($textContent, true);
+
+                if (is_array($moduleData) && isset($moduleData['files'])) {
+                    Log::info('🔄 Interception edit-module: mise à jour des fichiers dans client-package');
+
+                    $writeResult = $writer->processModuleResult($moduleData);
+
+                    Log::info('📦 Résultat mise à jour module:', $writeResult);
+
+                    // Retourner un résumé lisible pour l'IA
+                    $summary = $writeResult['success']
+                        ? "✅ Module mis à jour avec succès dans client-package!\n"
+                        : "⚠️ Module partiellement mis à jour.\n";
+
+                    $summary .= "Fichiers impactés:\n";
+                    foreach ($writeResult['files_written'] as $file) {
+                        $summary .= "  - {$file}\n";
+                    }
+
+                    if (! empty($writeResult['errors'])) {
+                        $summary .= "\nErreurs:\n";
+                        foreach ($writeResult['errors'] as $error) {
+                            $summary .= "  - {$error}\n";
+                        }
+                    }
+
+                    return $summary;
+                }
+            }
+        }
+
         return $result;
     }
 
