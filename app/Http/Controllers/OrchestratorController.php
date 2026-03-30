@@ -72,8 +72,9 @@ class OrchestratorController extends Controller
 
         // 4. Créer un agent anonyme avec les outils MCP et lui soumettre le prompt
         $systemPrompt = 'Tu es un architecte logiciel Laravel expert. '
-            . 'Tu as accès à des outils externes (MCP) pour interagir avec le projet cible. '
-            . 'Tu DOIS utiliser les outils pour obtenir les informations réelles avant de répondre. '
+            . 'Tu as accès à des outils externes (MCP) pour interagir avec le projet. '
+            . 'SURTOUT pour "edit-module", tu DOIS impérativement utiliser un OBJET JSON structuré pour le paramètre "changes" '
+            . 'avec les clés "added", "renamed" ou "modified" comme spécifié dans le schéma. Ne mets JAMAIS de texte simple dans "changes". '
             . 'Réponds toujours en français et de manière précise.';
 
         $agent = new AnonymousAgent(
