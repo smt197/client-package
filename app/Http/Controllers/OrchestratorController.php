@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Ai\Tools\McpTool;
+use App\Jobs\ProcessModuleAction;
 use App\Services\ModuleWriterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -123,28 +124,11 @@ class OrchestratorController extends Controller
                 if (is_array($moduleData) && isset($moduleData['files'])) {
                     Log::info('🏗️ Interception generate-module: écriture des fichiers dans client-package');
 
-                    $writeResult = $writer->processModuleResult($moduleData);
+                    ProcessModuleAction::dispatch('generate', $moduleData);
+                    
+                    Log::info('🚀 Tâche generate-module mise en file d\'attente Redis.');
 
-                    Log::info('📦 Résultat écriture module:', $writeResult);
-
-                    // Retourner un résumé lisible pour l'IA
-                    $summary = $writeResult['success']
-                        ? "✅ Module écrit avec succès dans client-package!\n"
-                        : "⚠️ Module partiellement écrit.\n";
-
-                    $summary .= "Fichiers créés:\n";
-                    foreach ($writeResult['files_written'] as $file) {
-                        $summary .= "  - {$file}\n";
-                    }
-
-                    if (! empty($writeResult['errors'])) {
-                        $summary .= "\nErreurs:\n";
-                        foreach ($writeResult['errors'] as $error) {
-                            $summary .= "  - {$error}\n";
-                        }
-                    }
-
-                    return $summary;
+                    return "✅ Tâche de génération de module mise en file d'attente. L'écriture se fera en arrière-plan.";
                 }
             }
         }
@@ -159,28 +143,11 @@ class OrchestratorController extends Controller
                 if (is_array($moduleData) && isset($moduleData['files_to_delete'])) {
                     Log::info('🗑️ Interception delete-module: suppression des fichiers dans client-package');
 
-                    $deleteResult = $writer->processDeleteResult($moduleData);
+                    ProcessModuleAction::dispatch('delete', $moduleData);
+                    
+                    Log::info('🚀 Tâche delete-module mise en file d\'attente Redis.');
 
-                    Log::info('📦 Résultat suppression module:', $deleteResult);
-
-                    // Retourner un résumé lisible pour l'IA
-                    $summary = $deleteResult['success']
-                        ? "✅ Module supprimé avec succès de client-package!\n"
-                        : "⚠️ Module partiellement supprimé.\n";
-
-                    $summary .= "Fichiers supprimés:\n";
-                    foreach ($deleteResult['files_deleted'] as $file) {
-                        $summary .= "  - {$file}\n";
-                    }
-
-                    if (! empty($deleteResult['errors'])) {
-                        $summary .= "\nErreurs:\n";
-                        foreach ($deleteResult['errors'] as $error) {
-                            $summary .= "  - {$error}\n";
-                        }
-                    }
-
-                    return $summary;
+                    return "✅ Tâche de suppression de module mise en file d'attente. La suppression se fera en arrière-plan.";
                 }
             }
         }
@@ -195,28 +162,11 @@ class OrchestratorController extends Controller
                 if (is_array($moduleData) && isset($moduleData['files'])) {
                     Log::info('🔄 Interception edit-module: mise à jour des fichiers dans client-package');
 
-                    $writeResult = $writer->processModuleResult($moduleData);
+                    ProcessModuleAction::dispatch('edit', $moduleData);
+                    
+                    Log::info('🚀 Tâche edit-module mise en file d\'attente Redis.');
 
-                    Log::info('📦 Résultat mise à jour module:', $writeResult);
-
-                    // Retourner un résumé lisible pour l'IA
-                    $summary = $writeResult['success']
-                        ? "✅ Module mis à jour avec succès dans client-package!\n"
-                        : "⚠️ Module partiellement mis à jour.\n";
-
-                    $summary .= "Fichiers impactés:\n";
-                    foreach ($writeResult['files_written'] as $file) {
-                        $summary .= "  - {$file}\n";
-                    }
-
-                    if (! empty($writeResult['errors'])) {
-                        $summary .= "\nErreurs:\n";
-                        foreach ($writeResult['errors'] as $error) {
-                            $summary .= "  - {$error}\n";
-                        }
-                    }
-
-                    return $summary;
+                    return "✅ Tâche de modification de module mise en file d'attente. Les mises à jour se feront en arrière-plan.";
                 }
             }
         }
