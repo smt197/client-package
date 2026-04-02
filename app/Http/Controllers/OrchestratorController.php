@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Ai\Tools\McpTool;
 use App\Jobs\ProcessModuleAction;
+use App\Models\AiAgent;
 use App\Services\ModuleWriterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,9 +26,15 @@ class OrchestratorController extends Controller
     {
         $request->validate([
             'prompt' => 'required|string|max:5000',
+            'agent_name' => 'nullable|string',
         ]);
 
         $prompt = $request->input('prompt');
+        $agentName = $request->input('agent_name');
+        
+        $aiAgentModel = $agentName 
+            ? AiAgent::where('name', $agentName)->orWhere('slug', $agentName)->first() 
+            : null;
 
         // 1. Initialiser la session MCP (obligatoire avant tout appel)
         $this->initializeMcpSession();
@@ -72,11 +79,15 @@ class OrchestratorController extends Controller
         Log::info("🛠️ Outils MCP chargés pour l'Agent : ", $registeredToolNames);
 
         // 4. Créer un agent anonyme avec les outils MCP et lui soumettre le prompt
-        $systemPrompt = 'Tu es un architecte logiciel Laravel expert. '
+        $defaultPrompt = 'Tu es un architecte logiciel Laravel expert. '
             . 'Tu as accès à des outils externes (MCP) pour interagir avec le projet. '
             . 'SURTOUT pour "edit-module", tu DOIS impérativement utiliser un OBJET JSON structuré pour le paramètre "changes" '
             . 'avec les clés "added", "renamed" ou "modified" comme spécifié dans le schéma. Ne mets JAMAIS de texte simple dans "changes". '
             . 'Réponds toujours en français et de manière précise.';
+
+        $systemPrompt = $aiAgentModel && !empty($aiAgentModel->instructions) 
+            ? $aiAgentModel->instructions 
+            : $defaultPrompt;
 
         $agent = new AnonymousAgent(
             instructions: $systemPrompt,
@@ -84,10 +95,13 @@ class OrchestratorController extends Controller
             tools: $aiTools
         );
 
+        $provider = $aiAgentModel ? $aiAgentModel->provider : 'openai';
+        $model = $aiAgentModel ? $aiAgentModel->model_name : env('OLLAMA_MODEL', 'qwen2.5:7b');
+
         $response = $agent->prompt(
             prompt: $prompt,
-            provider: 'openai',
-            model: env('OLLAMA_MODEL', 'qwen2.5:7b'),
+            provider: $provider,
+            model: $model,
             timeout: 600
         );
 
